@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLBB Diamond Sale - Final Update</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root { --bg: #0b0e14; --card-bg: #161b22; --neon-blue: #00d2ff; --neon-green: #39ff14; --neon-purple: #bc13fe; --text: #ffffff; }
+        body { font-family: sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 10px; }
+        .container { max-width: 1000px; margin: auto; display: none; }
+        #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; }
+        .login-btn { background: #db4437; color: white; border: none; padding: 15px 30px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-top: 20px; }
+        h1 { text-align: center; color: var(--neon-blue); text-shadow: 0 0 10px var(--neon-blue); font-size: 22px; }
+        .sc-rate-box { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 10px; border: 1px solid var(--neon-purple); text-align: center; margin-bottom: 20px; }
+        .price-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .price-card { background: white; color: black; padding: 10px; border-radius: 8px; font-weight: bold; text-align: center; }
+        .price-card span { display: block; font-size: 11px; color: #555; }
+        .dashboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        .card { background: var(--card-bg); padding: 10px; border-radius: 8px; text-align: center; border-bottom: 3px solid var(--neon-purple); }
+        .card h4 { margin: 0; font-size: 10px; color: #aaa; }
+        .card p { margin: 5px 0 0; font-size: 14px; font-weight: bold; color: var(--neon-green); }
+        .input-group { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 15px; }
+        input, select { background: white; border: 1px solid #ddd; color: black; padding: 10px; margin: 5px 0; border-radius: 5px; width: 100%; box-sizing: border-box; }
+        button { background: var(--neon-blue); color: black; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 5px; }
+        .delete-btn { background: #ff4d4d; color: white; padding: 5px 10px; font-size: 11px; border: none; border-radius: 4px; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; background: var(--card-bg); font-size: 12px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #30363d; }
+        th { color: var(--neon-blue); }
+    </style>
+</head>
+<body>
+
+<div id="login-screen">
+    <h2 style="color: var(--neon-blue);">💎 MLBB Sales Management 💎</h2>
+    <p>Cloud နှင့် ချိတ်ဆက်ရန် Login အရင်ဝင်ပါ</p>
+    <button class="login-btn" onclick="login()">Login with Google</button>
+</div>
+
+<div class="container" id="main-container">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <p id="userEmail" style="font-size: 12px; color: #888;"></p>
+        <button style="background:transparent; color:red; border:1px solid red; width:auto; padding:5px;" onclick="logout()">Logout</button>
+    </div>
+    
+    <h1>💎 MLBB Diamond Sale (Cloud Sync) 💎</h1>
+
+    <div class="sc-rate-box">
+        <label>⚙️ ယနေ့ Sc Rate ထည့်ရန် (1 Sc = ? ကျပ်)</label><br>
+        <input type="number" id="scRate" style="width: 120px; text-align: center; font-size: 18px; margin-top: 10px;" placeholder="75.8" oninput="updatePriceCards()">
+    </div>
+
+    <div class="price-grid" id="priceGrid"></div>
+
+    <div class="dashboard">
+        <div class="card"><h4>ရွေးချယ်ထားသောရက်အမြတ်</h4><p id="totalProfit">0</p></div>
+        <div class="card"><h4>ရောင်းရငွေစုစုပေါင်း</h4><p id="totalSell">0</p></div>
+        <div class="card"><h4>ရာသက်ပန်စုစုပေါင်းအမြတ်</h4><p id="overallProfit">0</p></div>
+    </div>
+
+    <div class="input-group">
+        <div style="display: flex; gap: 10px;">
+            <input type="date" id="saleDate">
+            <input type="text" id="custName" placeholder="Customer Name">
+        </div>
+        <select id="packageSelect" onchange="calculateBuyPrice()">
+            <option value="">-- Package ရွေးပါ --</option>
+        </select>
+        <input type="number" id="sellPrice" placeholder="ရောင်းဈေး (ကျပ်)">
+        <input type="hidden" id="buyPrice">
+        <button onclick="addRecord()">Cloud ပေါ်သို့ သိမ်းမည်</button>
+    </div>
+
+    <input type="text" id="searchBar" placeholder="🔍 ရက်စွဲ (ဥပမာ 2026-02-23) သို့မဟုတ် နာမည်ဖြင့် ရှာရန်..." onkeyup="searchRecords()" style="margin-bottom: 10px; padding: 12px; width: 100%; box-sizing: border-box; border-radius: 5px; border: 1px solid var(--neon-blue);">
+
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>နေ့စွဲ</th>
+                    <th>Customer</th>
+                    <th>Package</th>
+                    <th>ဝယ်ရင်း</th>
+                    <th>ရောင်းဈေး</th>
+                    <th>အမြတ်</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // Firebase Setup
+    const firebaseConfig = {
+        apiKey: "AIzaSyAe7CMFx0eLZmJ6PGNsvLyAjtude_s",
+        authDomain: "diamond-sales-fcb29.firebaseapp.com",
+        projectId: "diamond-sales-fcb29",
+        storageBucket: "diamond-sales-fcb29.firebasestorage.app",
+        messagingSenderId: "928447803826",
+        appId: "1:928447803826:web:c09e7fc3b50d544b2ab4ab"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    let currentUser = null;
+    let allSales = [];
+
+    function login() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    function logout() { auth.signOut(); }
+
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            currentUser = user;
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('main-container').style.display = 'block';
+            document.getElementById('userEmail').innerText = "User: " + user.email;
+            loadData();
+        } else {
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('main-container').style.display = 'none';
+        }
+    });
+
+    // Package Data (429 Dia corrected to 299.5 Sc)
+    const packages = [
+        { name: "50+50 (2X)", sc: 39 }, { name: "150+150 (2X)", sc: 116.9 }, { name: "250+250 (2X)", sc: 187.5 }, { name: "500+500 (2X)", sc: 385 },
+        { name: "86 Dia", sc: 61.5 }, { name: "172 Dia", sc: 122 }, { name: "257 Dia", sc: 177.5 }, { name: "343 Dia", sc: 239 },
+        { name: "429 Dia", sc: 299.5 }, { name: "514 Dia", sc: 355 }, { name: "600 Dia", sc: 416.5 }, { name: "706 Dia", sc: 480 },
+        { name: "878 Dia", sc: 602 }, { name: "1050 Dia", sc: 724 }, { name: "2195 Dia", sc: 1453 }, { name: "3688 Dia", sc: 2424 },
+        { name: "5532 Dia", sc: 3660 }, { name: "9288 Dia", sc: 6079 }, { name: "Weekly Pass", sc: 76 }, { name: "Twilight Pass", sc: 402.5 }
+    ];
+
+    function updatePriceCards() {
+        const rate = parseFloat(document.getElementById('scRate').value) || 0;
+        const grid = document.getElementById('priceGrid');
+        const select = document.getElementById('packageSelect');
+        grid.innerHTML = "";
+        if(select.options.length <= 1) {
+            packages.forEach(p => {
+                let opt = document.createElement('option');
+                opt.value = p.name; opt.innerText = p.name;
+                select.appendChild(opt);
+            });
+        }
+        packages.forEach(p => {
+            const cost = Math.round(p.sc * rate);
+            grid.innerHTML += `<div class="price-card"><span>${p.name}</span>${cost.toLocaleString()}</div>`;
+        });
+    }
+
+    function calculateBuyPrice() {
+        const rate = parseFloat(document.getElementById('scRate').value) || 0;
+        const pkg = packages.find(p => p.name === document.getElementById('packageSelect').value);
+        if(pkg) document.getElementById('buyPrice').value = Math.round(pkg.sc * rate);
+    }
+
+    async function addRecord() {
+        const date = document.getElementById('saleDate').value;
+        const pkg = document.getElementById('packageSelect').value;
+        const sell = parseFloat(document.getElementById('sellPrice').value);
+        const buy = parseFloat(document.getElementById('buyPrice').value);
+        if(!date || !pkg || !sell) return alert("ဖြည့်ပါ");
+
+        await db.collection("sales").add({
+            userId: currentUser.uid, date, pkg, buy, sell,
+            name: document.getElementById('custName').value || "No Name",
+            profit: sell - buy, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        document.getElementById('sellPrice').value = "";
+    }
+
+    function loadData() {
+        db.collection("sales").where("userId", "==", currentUser.uid).orderBy("date", "desc")
+          .onSnapshot(snap => {
+              allSales = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              render(allSales);
+          });
+    }
+
+    async function deleteRecord(id) {
+        if(confirm("ဖျက်မှာလား?")) await db.collection("sales").doc(id).delete();
+    }
+
+    function searchRecords() {
+        const q = document.getElementById('searchBar').value.toLowerCase();
+        const filtered = allSales.filter(s => s.date.includes(q) || s.name.toLowerCase().includes(q));
+        render(filtered);
+    }
+
+    function render(data) {
+        const body = document.getElementById('tableBody');
+        body.innerHTML = "";
+        let dispProfit = 0, dispSell = 0, overall = 0;
+        allSales.forEach(s => overall += s.profit);
+        data.forEach(s => {
+            dispProfit += s.profit; dispSell += s.sell;
+            body.innerHTML += `<tr>
+                <td>${s.date}</td><td>${s.name}</td><td>${s.pkg}</td>
+                <td>${s.buy.toLocaleString()}</td><td>${s.sell.toLocaleString()}</td>
+                <td style="color:var(--neon-green)">${s.profit.toLocaleString()}</td>
+                <td><button class="delete-btn" onclick="deleteRecord('${s.id}')">ဖျက်မည်</button></td>
+            </tr>`;
+        });
+        document.getElementById('totalProfit').innerText = dispProfit.toLocaleString();
+        document.getElementById('totalSell').innerText = dispSell.toLocaleString();
+        document.getElementById('overallProfit').innerText = overall.toLocaleString();
+    }
+
+    document.getElementById('saleDate').valueAsDate = new Date();
+    updatePriceCards();
+</script>
+</body>
+</html>
